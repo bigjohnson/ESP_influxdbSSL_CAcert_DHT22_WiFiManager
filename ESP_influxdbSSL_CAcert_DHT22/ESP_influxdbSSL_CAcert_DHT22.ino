@@ -131,6 +131,10 @@ void setup() {
   //WiFiManager
   //Local intialization. Once its business is done, there is no need to keep it around
   WiFiManager wifiManager;
+  
+#ifndef DEBUG
+  wifiManager.setDebugOutput(false);
+#endif
 
   //wifiManager.resetSettings();
 
@@ -149,10 +153,6 @@ void setup() {
   wifiManager.addParameter(&custom_measurement);
   wifiManager.addParameter(&custom_location);
 
-  #ifndef DEBUG
-  wifiManager.setDebugOutput(false);
-#endif
-  
   //reset settings - for testing
   //wifiManager.resetSettings();
 
