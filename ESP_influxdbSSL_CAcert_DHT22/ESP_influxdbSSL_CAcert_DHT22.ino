@@ -149,6 +149,10 @@ void setup() {
   wifiManager.addParameter(&custom_measurement);
   wifiManager.addParameter(&custom_location);
 
+  #ifndef DEBUG
+  wifiManager.setDebugOutput(false);
+#endif
+  
   //reset settings - for testing
   //wifiManager.resetSettings();
 
