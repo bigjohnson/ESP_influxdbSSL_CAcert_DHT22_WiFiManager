@@ -1,0 +1,1 @@
+{"influxdb_server":"influxdb.panu.it","influxdb_port":"443","influxdb_user":"user","influxdb_pass":"password","influxdb_db":"database","measurement":"measurement","location":"location"}
