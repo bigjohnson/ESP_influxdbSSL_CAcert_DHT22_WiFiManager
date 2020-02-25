@@ -13,7 +13,7 @@
 #define DEBUG
 #define INTERVALLO 300
 
-//if you wont deepsleep between reads
+//if you want deepsleep between reads
 #define DEEPSLEEP
 
 unsigned long int durata;
