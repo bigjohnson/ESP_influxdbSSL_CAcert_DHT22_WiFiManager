@@ -7,18 +7,27 @@
 #include <ESP8266WebServer.h>
 #include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager
 
+#Work with version 5 or 6 of ArduinoJson
 #include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
 
 #define DEBUG
 #define INTERVALLO 300
+
+//if you wont deepsleep between reads
+#define DEEPSLEEP
+
+unsigned long int durata;
 
 #include <time.h>
 #include <WiFiClientSecure.h>
 
 #include "DHT.h"
 #define DHTPIN 4     // what digital pin the DHT22 is conected to
+//#define DHTPIN 2     // what digital pin the DHT22 is conected to
 #define DHTTYPE DHT22   // there are multiple kinds of DHT sensors
 DHT dht(DHTPIN, DHTTYPE);
+
+#define TRIGGER_PIN 5
 
 // Root certificate used by api.github.com.
 // Defined in "CACert" tab.
@@ -52,7 +61,13 @@ void saveConfigCallback () {
 }
 
 void setup() {
+#ifdef DEEPSLEEP
+  durata = millis();
+#endif
+  dht.begin();
+
   // put your setup code here, to run once:
+  pinMode(TRIGGER_PIN, INPUT_PULLUP);
 
 #ifdef DEBUG
   Serial.begin(115200);
@@ -85,12 +100,25 @@ void setup() {
         std::unique_ptr<char[]> buf(new char[size]);
 
         configFile.readBytes(buf.get(), size);
+#if ARDUINOJSON_VERSION_MAJOR <= 5
         DynamicJsonBuffer jsonBuffer;
         JsonObject& json = jsonBuffer.parseObject(buf.get());
-#ifdef DEBUG
-        json.printTo(Serial);
+#else
+        DynamicJsonDocument json(1024);
+        auto deserializeError = deserializeJson(json, buf.get());
 #endif
+#ifdef DEBUG
+#if ARDUINOJSON_VERSION_MAJOR <= 5
+        json.printTo(Serial);
+#else
+        serializeJson(json, Serial);
+#endif
+#endif
+#if ARDUINOJSON_VERSION_MAJOR <= 5
         if (json.success()) {
+#else
+        if ( ! deserializeError )  {
+#endif
 #ifdef DEBUG
           Serial.println("\nparsed json");
 #endif
@@ -131,7 +159,7 @@ void setup() {
   //WiFiManager
   //Local intialization. Once its business is done, there is no need to keep it around
   WiFiManager wifiManager;
-  
+
 #ifndef DEBUG
   wifiManager.setDebugOutput(false);
 #endif
@@ -163,22 +191,35 @@ void setup() {
   //sets timeout until configuration portal gets turned off
   //useful to make it all retry or go to sleep
   //in seconds
-  //wifiManager.setTimeout(120);
+  wifiManager.setTimeout(120);
 
   //fetches ssid and pass and tries to connect
   //if it does not connect it starts an access point with the specified name
   //here  "AutoConnectAP"
   //and goes into a blocking loop awaiting configuration
-  if (!wifiManager.autoConnect("AutoConnectAP", "password")) {
-#ifdef DEBUG
-    Serial.println("failed to connect and hit timeout");
-#endif
-    delay(3000);
-    //reset and try again, or maybe put it to deep sleep
-    ESP.reset();
-    delay(5000);
-  }
 
+  if ( digitalRead(TRIGGER_PIN) == LOW ) {
+    if (!wifiManager.startConfigPortal("OnDemandAP", "password")) {
+#ifdef DEBUG
+      Serial.println("failed to connect and hit timeout");
+#endif
+      //delay(3000);
+      //reset and try again, or maybe put it to deep sleep
+      ESP.reset();
+      delay(5000);
+    }
+  } else {
+
+    if (!wifiManager.autoConnect("AutoConnectAP", "password")) {
+#ifdef DEBUG
+      Serial.println("failed to connect and hit timeout");
+#endif
+      //delay(3000);
+      //reset and try again, or maybe put it to deep sleep
+      ESP.reset();
+      delay(5000);
+    }
+  }
   //if you get here you have connected to the WiFi
 #ifdef DEBUG
   Serial.println("connected...yeey :)");
@@ -200,8 +241,13 @@ void setup() {
 #ifdef DEBUG
     Serial.println("saving config");
 #endif
+    
+#if ARDUINOJSON_VERSION_MAJOR <= 5
     DynamicJsonBuffer jsonBuffer;
     JsonObject& json = jsonBuffer.createObject();
+#else    
+    DynamicJsonDocument json(1024);
+#endif    
     json["influxdb_server"] = influxdb_server;
     json["influxdb_port"] = influxdb_port;
     json["influxdb_user"] = influxdb_user;
@@ -215,10 +261,18 @@ void setup() {
     if (!configFile) {
       Serial.println("failed to open config file for writing");
     }
+#if ARDUINOJSON_VERSION_MAJOR <= 5
     json.printTo(Serial);
+#else
+    serializeJson(json, Serial);
+#endif
     Serial.println("");
 #endif
+#if ARDUINOJSON_VERSION_MAJOR <= 5
     json.printTo(configFile);
+#else
+    serializeJson(json, configFile);
+#endif
     configFile.close();
     //end save
   }
@@ -228,7 +282,7 @@ void setup() {
   Serial.print("Setting time using SNTP");
 #endif
 
-  configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov");
+  configTime(0, 0, "it.pool.ntp.org", "time.nist.gov");
   time_t now = time(nullptr);
   while (now < 8 * 3600 * 2) {
     delay(500);
@@ -242,7 +296,7 @@ void setup() {
 #ifdef DEBUG
   Serial.println("");
 #endif
-  struct tm timeinfo;
+  // struct tm timeinfo;
   tempo = now;
   //gmtime_r(&now, &timeinfo);
 
@@ -269,16 +323,18 @@ void loop() {
 
   if ( now < tempo ) {
     tempo = now;
-  }
+  } 
 
   if ( ( now - tempo >= INTERVALLO ) || first ) {
-
     tempo = now;
-    if (first) {
-      first = false;
-    }
     float h = dht.readHumidity();
     float t = dht.readTemperature();
+
+    if ( isnan(h) || isnan(t) || h > 100) {
+      Serial.println(F("Failed to read from DHT sensor!"));
+      delay(1000);
+      return;
+    }
 
 #ifdef DEBUG
     Serial.print("Current time: ");
@@ -286,9 +342,9 @@ void loop() {
     Serial.print("Humidity: ");
     Serial.print(h);
     Serial.println("%");
-    Serial.print("Temperature ");
+    Serial.print("Temperature: ");
     Serial.print(t);
-    Serial.println("°C");
+    Serial.println("C");
 
     Serial.print("connecting to ");
     Serial.print(influxdb_server);
@@ -355,6 +411,34 @@ void loop() {
     Serial.println("==========");
     Serial.println();
 #endif
+    if (first) {
+      first = false;
+    }
+//    tempo = now;
+
+    unsigned long int adesso = millis();
+    #ifdef DEEPSLEEP
+    if (durata > adesso) {
+      durata = adesso;
+    }
+    if ( (adesso - durata) < (INTERVALLO * 1000)) {
+      unsigned long int attesa = ((INTERVALLO * 1000000)-(adesso - durata) * 1000);
+#ifdef DEBUG
+      Serial.print("Going into deep sleep for ");
+      Serial.print(attesa / 1000000);
+      Serial.println(" seconds");
+#endif
+      ESP.deepSleep(attesa);
+    } else {
+      durata = millis();
+    }
+#endif
+#ifdef DEBUG
+#ifndef DEEPSLEEP
+  Serial.print("Waiting ");
+  Serial.print(INTERVALLO - ((adesso - durata)/1000));
+  Serial.println(" seconds");
+  #endif
+#endif
   }
-  //  delay(10000);
 }
