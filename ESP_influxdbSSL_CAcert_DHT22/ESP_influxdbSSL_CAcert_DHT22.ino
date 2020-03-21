@@ -13,7 +13,8 @@
 #define DEBUG
 #define INTERVALLO 300
 
-//if you want deepsleep between reads
+// if you want deepsleep between reads
+// YOU MUST CONNECT PIN D0 TO RESET OR THE SKETCH RUN ONLY ONE TIME
 #define DEEPSLEEP
 
 unsigned long int durata;
