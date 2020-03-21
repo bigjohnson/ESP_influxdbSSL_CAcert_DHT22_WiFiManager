@@ -7,7 +7,7 @@
 #include <ESP8266WebServer.h>
 #include <WiFiManager.h>          //https://github.com/tzapu/WiFiManager
 
-#Work with version 5 or 6 of ArduinoJson
+//Work with version 5 or 6 of ArduinoJson
 #include <ArduinoJson.h>          //https://github.com/bblanchon/ArduinoJson
 
 #define DEBUG
